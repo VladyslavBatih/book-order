@@ -2,5 +2,5 @@
 /out/
 /.idea
 *.iml
-*.txt
+output.txt
 /target/
