@@ -50,7 +50,7 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
                 }
                 readLine = reader.readLine();
             }
-            saveOutputFile(stringBuilder.toString());
+            saveOutputFile(stringBuilder.toString().trim());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -58,12 +58,14 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
 
     @Override
     public void makeLimitOrder(Order order) {
-        if (order.getType().equals(Constant.TYPE_ASK)) {
-            List<Order> orderAskList = bookOrder.getOrderAskList();
-            addOrderToOrderList(orderAskList, order);
-        } else {
-            List<Order> orderBidList = bookOrder.getOrderBidList();
-            addOrderToOrderList(orderBidList, order);
+        if (order.getPrice() > 0) {
+            if (order.getType().equals(Constant.TYPE_ASK)) {
+                List<Order> orderAskList = bookOrder.getOrderAskList();
+                addOrderToOrderList(orderAskList, order);
+            } else {
+                List<Order> orderBidList = bookOrder.getOrderBidList();
+                addOrderToOrderList(orderBidList, order);
+            }
         }
     }
 
@@ -93,7 +95,7 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
                         .filter(o -> o.getSize() != 0)
                         .findAny()
                         .ifPresent(order -> stringBuilder.append(order.getPrice())
-                                        .append(",").append(order.getSize()).append(System.lineSeparator()));
+                                .append(",").append(order.getSize()).append(System.lineSeparator()));
                 break;
             }
             case Constant.QUERY_BID: {
@@ -139,25 +141,26 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
     }
 
     private void addOrderToOrderList(List<Order> orderList, Order order) {
-        boolean priceWasFound = false;
+        boolean priceIsPresent = false;
         for (Order currentOrder : orderList) {
             if (currentOrder.getPrice() == order.getPrice()) {
                 currentOrder.setSize(order.getSize());
-                priceWasFound = true;
+                priceIsPresent = true;
             }
         }
-        if (!priceWasFound) {
+        if (!priceIsPresent) {
             orderList.add(order);
         }
     }
 
     private void subtractionSizeFromOrders(List<Order> orderList, int size) {
         for (Order order : orderList) {
-            if (size >= order.getSize()) {
+            if (size > order.getSize()) {
                 size -= order.getSize();
                 order.setSize(0);
             } else {
                 order.setSize(order.getSize() - size);
+                size = 0;
             }
         }
     }
