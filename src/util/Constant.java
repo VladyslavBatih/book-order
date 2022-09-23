@@ -15,8 +15,6 @@ public class Constant {
     public static final String QUERY_BID = "best_bid";
     public static final String QUERY_SIZE = "size";
 
-    public static final int INDEX_BEST_PRICE = 0;
-
     private Constant() {
     }
 }

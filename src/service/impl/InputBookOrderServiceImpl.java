@@ -10,7 +10,6 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.FileNotFoundException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -59,46 +58,26 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
 
     @Override
     public void makeLimitOrder(Order order) {
-        List<Order> orderAskList = bookOrder.getOrderAskList();
-        List<Order> orderBidList = bookOrder.getOrderBidList();
         if (order.getType().equals(Constant.TYPE_ASK)) {
-            if (orderAskList.isEmpty() && orderBidList.isEmpty()) {
-                orderAskList.add(order);
-            } else {
-                sortOrderList(orderBidList, Constant.TYPE_BID);
-                Order newOrder = removeOrderFromList(orderBidList, order.getPrice(), order.getSize(), Constant.TYPE_BID);
-                if (newOrder != null) {
-                    newOrder.setType(Constant.TYPE_ASK);
-                    addOrderToOrderList(orderAskList, newOrder);
-                }
-            }
-        }
-        if (order.getType().equals(Constant.TYPE_BID)) {
-            if (orderAskList.isEmpty() && orderBidList.isEmpty()) {
-                orderBidList.add(order);
-            } else {
-                sortOrderList(orderAskList, Constant.TYPE_ASK);
-                Order newOrder = removeOrderFromList(orderAskList, order.getPrice(), order.getSize(), Constant.TYPE_ASK);
-                if (newOrder != null) {
-                    newOrder.setType(Constant.TYPE_BID);
-                    addOrderToOrderList(orderBidList, newOrder);
-                }
-            }
+            List<Order> orderAskList = bookOrder.getOrderAskList();
+            addOrderToOrderList(orderAskList, order);
+        } else {
+            List<Order> orderBidList = bookOrder.getOrderBidList();
+            addOrderToOrderList(orderBidList, order);
         }
     }
 
     @Override
     public void makeMarketOrder(String action, int size) {
-        List<Order> orderList;
         if (action.equals(Constant.ACTION_BUY)) {
-            orderList = bookOrder.getOrderAskList();
-            sortOrderList(orderList, Constant.TYPE_ASK);
-            removeOrderFromList(orderList, size);
+            List<Order> orderAskList = bookOrder.getOrderAskList();
+            sortOrderList(orderAskList, Constant.TYPE_ASK);
+            subtractionSizeFromOrders(orderAskList, size);
         }
         if (action.equals(Constant.ACTION_SELL)) {
-            orderList = bookOrder.getOrderBidList();
-            sortOrderList(orderList, Constant.TYPE_BID);
-            removeOrderFromList(orderList, size);
+            List<Order> orderBidList = bookOrder.getOrderBidList();
+            sortOrderList(orderBidList, Constant.TYPE_BID);
+            subtractionSizeFromOrders(orderBidList, size);
         }
     }
 
@@ -107,16 +86,24 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
         StringBuilder stringBuilder = new StringBuilder();
         String[] queryFields = query.split(",");
         switch (queryFields[1]) {
-            case Constant.QUERY_BID: {
-                bookOrder.getOrderBidList().sort(Comparator.comparingInt(Order::getPrice).reversed());
-                Order order = bookOrder.getOrderBidList().get(Constant.INDEX_BEST_PRICE);
-                stringBuilder.append(order.getPrice()).append(",").append(order.getSize()).append(System.lineSeparator());
+            case Constant.QUERY_ASK: {
+                List<Order> orderAskList = bookOrder.getOrderAskList();
+                sortOrderList(orderAskList, Constant.TYPE_ASK);
+                orderAskList.stream()
+                        .filter(o -> o.getSize() != 0)
+                        .findAny()
+                        .ifPresent(order -> stringBuilder.append(order.getPrice())
+                                        .append(",").append(order.getSize()).append(System.lineSeparator()));
                 break;
             }
-            case Constant.QUERY_ASK: {
-                bookOrder.getOrderAskList().sort(Comparator.comparingInt(Order::getPrice));
-                Order order = bookOrder.getOrderAskList().get(Constant.INDEX_BEST_PRICE);
-                stringBuilder.append(order.getPrice()).append(",").append(order.getSize()).append(System.lineSeparator());
+            case Constant.QUERY_BID: {
+                List<Order> orderBidList = bookOrder.getOrderBidList();
+                sortOrderList(orderBidList, Constant.TYPE_BID);
+                orderBidList.stream()
+                        .filter(o -> o.getSize() != 0)
+                        .findAny()
+                        .ifPresent(order -> stringBuilder.append(order.getPrice())
+                                .append(",").append(order.getSize()).append(System.lineSeparator()));
                 break;
             }
             case Constant.QUERY_SIZE: {
@@ -164,44 +151,15 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
         }
     }
 
-    private void removeOrderFromList(List<Order> orderList, int size) {
-        List<Order> removeOrderList = new ArrayList<>();
+    private void subtractionSizeFromOrders(List<Order> orderList, int size) {
         for (Order order : orderList) {
-            while (size != 0) {
-                if (size >= order.getSize()) {
-                    size -= order.getSize();
-                    removeOrderList.add(order);
-                } else {
-                    order.setSize(order.getSize() - size);
-                    size = 0;
-                }
+            if (size >= order.getSize()) {
+                size -= order.getSize();
+                order.setSize(0);
+            } else {
+                order.setSize(order.getSize() - size);
             }
         }
-        orderList.removeAll(removeOrderList);
-    }
-
-    private Order removeOrderFromList(List<Order> orderList, int price, int size, String listType) {
-        List<Order> removeOrderList = new ArrayList<>();
-        Order newOrder = null;
-        for (Order order : orderList) {
-            if ((listType.equals(Constant.TYPE_ASK) && price >= order.getPrice())
-                    || (listType.equals(Constant.TYPE_BID) && price <= order.getPrice())) {
-                if (size >= order.getSize()) {
-                    size -= order.getSize();
-                    removeOrderList.add(order);
-                } else {
-                    order.setSize(order.getSize() - size);
-                    size = 0;
-                }
-            }
-        }
-        if (size > 0) {
-            newOrder = new Order();
-            newOrder.setSize(size);
-            newOrder.setPrice(price);
-        }
-        orderList.removeAll(removeOrderList);
-        return newOrder;
     }
 
     private void saveOutputFile(String content) {
