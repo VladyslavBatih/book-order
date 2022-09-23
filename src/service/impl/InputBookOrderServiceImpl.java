@@ -1,7 +1,6 @@
 package service.impl;
 
 import model.BookOrder;
-import model.Order;
 import service.InputBookOrderService;
 import util.Constant;
 
@@ -10,9 +9,9 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.FileNotFoundException;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.TreeMap;
 
 public class InputBookOrderServiceImpl implements InputBookOrderService {
 
@@ -31,7 +30,11 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
             while (readLine != null) {
                 switch (readLine.charAt(0)) {
                     case 'u': {
-                        makeLimitOrder(createOrderFromInput(readLine));
+                        String[] fields = readLine.split(",");
+                        int price = Integer.parseInt(fields[1]);
+                        int size = Integer.parseInt(fields[2]);
+                        String type = fields[3];
+                        makeLimitOrder(price, size, type);
                         break;
                     }
                     case 'o': {
@@ -57,14 +60,12 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
     }
 
     @Override
-    public void makeLimitOrder(Order order) {
-        if (order.getPrice() > 0) {
-            if (order.getType().equals(Constant.TYPE_ASK)) {
-                List<Order> orderAskList = bookOrder.getOrderAskList();
-                addOrderToOrderList(orderAskList, order);
+    public void makeLimitOrder(int price, int size, String type) {
+        if (price > 0) {
+            if (type.equals(Constant.TYPE_ASK)) {
+                bookOrder.getOrderAskList().put(price, size);
             } else {
-                List<Order> orderBidList = bookOrder.getOrderBidList();
-                addOrderToOrderList(orderBidList, order);
+                bookOrder.getOrderBidList().put(price, size);
             }
         }
     }
@@ -72,13 +73,11 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
     @Override
     public void makeMarketOrder(String action, int size) {
         if (action.equals(Constant.ACTION_BUY)) {
-            List<Order> orderAskList = bookOrder.getOrderAskList();
-            sortOrderList(orderAskList, Constant.TYPE_ASK);
+            TreeMap<Integer, Integer> orderAskList = bookOrder.getOrderAskList();
             subtractionSizeFromOrders(orderAskList, size);
         }
         if (action.equals(Constant.ACTION_SELL)) {
-            List<Order> orderBidList = bookOrder.getOrderBidList();
-            sortOrderList(orderBidList, Constant.TYPE_BID);
+            TreeMap<Integer, Integer> orderBidList = bookOrder.getOrderBidList();
             subtractionSizeFromOrders(orderBidList, size);
         }
     }
@@ -89,33 +88,37 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
         String[] queryFields = query.split(",");
         switch (queryFields[1]) {
             case Constant.QUERY_ASK: {
-                List<Order> orderAskList = bookOrder.getOrderAskList();
-                sortOrderList(orderAskList, Constant.TYPE_ASK);
-                orderAskList.stream()
-                        .filter(o -> o.getSize() != 0)
+                TreeMap<Integer, Integer> orderAskList = bookOrder.getOrderAskList();
+                orderAskList.keySet().stream()
+                        .filter(key -> orderAskList.get(key) != 0)
                         .findAny()
-                        .ifPresent(order -> stringBuilder.append(order.getPrice())
-                                .append(",").append(order.getSize()).append(System.lineSeparator()));
+                        .ifPresent(key -> stringBuilder.append(key)
+                                .append(",").append(orderAskList.get(key))
+                                .append(System.lineSeparator()));
                 break;
             }
             case Constant.QUERY_BID: {
-                List<Order> orderBidList = bookOrder.getOrderBidList();
-                sortOrderList(orderBidList, Constant.TYPE_BID);
-                orderBidList.stream()
-                        .filter(o -> o.getSize() != 0)
+                TreeMap<Integer, Integer> orderBidList = bookOrder.getOrderBidList();
+                orderBidList.keySet().stream()
+                        .filter(key -> orderBidList.get(key) != 0)
                         .findAny()
-                        .ifPresent(order -> stringBuilder.append(order.getPrice())
-                                .append(",").append(order.getSize()).append(System.lineSeparator()));
+                        .ifPresent(key -> stringBuilder.append(key)
+                                .append(",").append(orderBidList.get(key))
+                                .append(System.lineSeparator()));
                 break;
             }
             case Constant.QUERY_SIZE: {
                 int price = Integer.parseInt(queryFields[2]);
-                bookOrder.getOrderAskList().addAll(bookOrder.getOrderBidList());
-                Order order = bookOrder.getOrderAskList().stream()
-                        .filter(o -> o.getPrice() == price)
-                        .findAny()
-                        .orElse(new Order());
-                stringBuilder.append(order.getSize()).append(System.lineSeparator());
+                TreeMap<Integer, Integer> orderAskList = bookOrder.getOrderAskList();
+                TreeMap<Integer, Integer> orderBidList = bookOrder.getOrderBidList();
+                Optional<Integer> optional = Optional.ofNullable(orderAskList.get(price));
+                if (optional.isEmpty()) {
+                    optional = Optional.ofNullable(orderBidList.get(price));
+                }
+                if (optional.isEmpty()) {
+                    optional = Optional.of(0);
+                }
+                stringBuilder.append(optional.get()).append(System.lineSeparator());
                 break;
             }
             default:
@@ -124,43 +127,16 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
         return stringBuilder.toString();
     }
 
-    private Order createOrderFromInput(String line) {
-        String[] fields = line.split(",");
-        Order order = new Order();
-        order.setPrice(Integer.parseInt(fields[1]));
-        order.setSize(Integer.parseInt(fields[2]));
-        order.setType(fields[3]);
-        return order;
-    }
-
-    private void sortOrderList(List<Order> orderList, String listType) {
-        orderList.sort(Comparator.comparingInt(Order::getPrice));
-        if (listType.equals(Constant.TYPE_BID)) {
-            Collections.reverse(orderList);
-        }
-    }
-
-    private void addOrderToOrderList(List<Order> orderList, Order order) {
-        boolean priceIsPresent = false;
-        for (Order currentOrder : orderList) {
-            if (currentOrder.getPrice() == order.getPrice()) {
-                currentOrder.setSize(order.getSize());
-                priceIsPresent = true;
-            }
-        }
-        if (!priceIsPresent) {
-            orderList.add(order);
-        }
-    }
-
-    private void subtractionSizeFromOrders(List<Order> orderList, int size) {
-        for (Order order : orderList) {
-            if (size > order.getSize()) {
-                size -= order.getSize();
-                order.setSize(0);
+    private void subtractionSizeFromOrders(TreeMap<Integer, Integer> orderList, int size) {
+        Set<Integer> keySet = orderList.keySet();
+        for (Integer integer : keySet) {
+            int valueSize = orderList.get(integer);
+            if (size > valueSize) {
+                size -= valueSize;
+                orderList.put(integer, 0);
             } else {
-                order.setSize(order.getSize() - size);
-                size = 0;
+                orderList.put(integer, valueSize - size);
+                return;
             }
         }
     }

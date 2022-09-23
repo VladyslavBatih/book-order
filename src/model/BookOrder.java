@@ -1,31 +1,31 @@
 package model;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Collections;
+import java.util.TreeMap;
 
 public class BookOrder {
 
-   private final List<Order> orderAskList;
-   private final List<Order> orderBidList;
+    private final TreeMap<Integer, Integer> orderAskList;
+    private final TreeMap<Integer, Integer> orderBidList;
 
     public BookOrder() {
-        orderBidList = new ArrayList<>();
-        orderAskList = new ArrayList<>();
+        orderAskList = new TreeMap<>();
+        orderBidList = new TreeMap<>(Collections.reverseOrder());
     }
 
-    public List<Order> getOrderAskList() {
+    public TreeMap<Integer, Integer> getOrderAskList() {
         return orderAskList;
     }
 
-    public List<Order> getOrderBidList() {
+    public TreeMap<Integer, Integer> getOrderBidList() {
         return orderBidList;
     }
 
     @Override
     public String toString() {
         return "BookOrder {" +
-                "orderBidList = " + orderBidList +
-                ", orderAskList = " + orderAskList +
+                "orderAskList = " + orderAskList +
+                ", orderBidList = " + orderBidList +
                 '}';
     }
 }

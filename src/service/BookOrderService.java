@@ -1,10 +1,8 @@
 package service;
 
-import model.Order;
-
 public interface BookOrderService {
 
-    void makeLimitOrder(Order order);
+    void makeLimitOrder(int price, int size, String type);
 
     void makeMarketOrder(String action, int size);
 }
