@@ -4,3 +4,4 @@
 *.iml
 output.txt
 /target/
+/src/META-INF/

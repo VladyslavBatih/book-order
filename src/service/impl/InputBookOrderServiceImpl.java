@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
@@ -28,26 +29,29 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
             BufferedReader reader = new BufferedReader(new FileReader(Constant.FILE_INPUT));
             StringBuilder stringBuilder = new StringBuilder();
             String readLine = reader.readLine();
-
             while (readLine != null) {
-                if (readLine.startsWith("u")) {
-                    makeLimitOrder(createOrderFromInput(readLine));
-
-                } else if (readLine.startsWith("o")) {
-                    String[] fields = readLine.split(",");
-                    String action = fields[1];
-                    int size = Integer.parseInt(fields[2]);
-                    makeMarketOrder(action, size);
-
-                } else if (readLine.startsWith("q")) {
-                    stringBuilder.append(executeQuery(readLine));
-
-                } else {
-                    throw new IllegalArgumentException("Invalid line");
+                switch (readLine.charAt(0)) {
+                    case 'u': {
+                        makeLimitOrder(createOrderFromInput(readLine));
+                        break;
+                    }
+                    case 'o': {
+                        String[] fields = readLine.split(",");
+                        String action = fields[1];
+                        int size = Integer.parseInt(fields[2]);
+                        makeMarketOrder(action, size);
+                        break;
+                    }
+                    case 'q': {
+                        stringBuilder.append(executeQuery(readLine));
+                        break;
+                    }
+                    default:
+                        break;
                 }
                 readLine = reader.readLine();
             }
-            saveOutputFile(stringBuilder.toString());
+            saveOutputFile(stringBuilder.toString().trim());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -55,23 +59,46 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
 
     @Override
     public void makeLimitOrder(Order order) {
+        List<Order> orderAskList = bookOrder.getOrderAskList();
+        List<Order> orderBidList = bookOrder.getOrderBidList();
         if (order.getType().equals(Constant.TYPE_ASK)) {
-            bookOrder.getOrderAskList().add(order);
+            if (orderAskList.isEmpty() && orderBidList.isEmpty()) {
+                orderAskList.add(order);
+            } else {
+                sortOrderList(orderBidList, Constant.TYPE_BID);
+                Order newOrder = removeOrderFromList(orderBidList, order.getPrice(), order.getSize(), Constant.TYPE_BID);
+                if (newOrder != null) {
+                    newOrder.setType(Constant.TYPE_ASK);
+                    addOrderToOrderList(orderAskList, newOrder);
+                }
+            }
         }
         if (order.getType().equals(Constant.TYPE_BID)) {
-            bookOrder.getOrderBidList().add(order);
+            if (orderAskList.isEmpty() && orderBidList.isEmpty()) {
+                orderBidList.add(order);
+            } else {
+                sortOrderList(orderAskList, Constant.TYPE_ASK);
+                Order newOrder = removeOrderFromList(orderAskList, order.getPrice(), order.getSize(), Constant.TYPE_ASK);
+                if (newOrder != null) {
+                    newOrder.setType(Constant.TYPE_BID);
+                    addOrderToOrderList(orderBidList, newOrder);
+                }
+            }
         }
     }
 
     @Override
     public void makeMarketOrder(String action, int size) {
+        List<Order> orderList;
         if (action.equals(Constant.ACTION_BUY)) {
-            bookOrder.getOrderAskList().sort(Comparator.comparingInt(Order::getPrice));
-            removeOrderFromList(bookOrder.getOrderAskList(), size);
+            orderList = bookOrder.getOrderAskList();
+            sortOrderList(orderList, Constant.TYPE_ASK);
+            removeOrderFromList(orderList, size);
         }
         if (action.equals(Constant.ACTION_SELL)) {
-            bookOrder.getOrderBidList().sort(Comparator.comparingInt(Order::getPrice).reversed());
-            removeOrderFromList(bookOrder.getOrderBidList(), size);
+            orderList = bookOrder.getOrderBidList();
+            sortOrderList(orderList, Constant.TYPE_BID);
+            removeOrderFromList(orderList, size);
         }
     }
 
@@ -83,13 +110,13 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
             case Constant.QUERY_BID: {
                 bookOrder.getOrderBidList().sort(Comparator.comparingInt(Order::getPrice).reversed());
                 Order order = bookOrder.getOrderBidList().get(Constant.INDEX_BEST_PRICE);
-                stringBuilder.append(order.getPrice()).append(",").append(order.getSize()).append("\n");
+                stringBuilder.append(order.getPrice()).append(",").append(order.getSize()).append(System.lineSeparator());
                 break;
             }
             case Constant.QUERY_ASK: {
                 bookOrder.getOrderAskList().sort(Comparator.comparingInt(Order::getPrice));
                 Order order = bookOrder.getOrderAskList().get(Constant.INDEX_BEST_PRICE);
-                stringBuilder.append(order.getPrice()).append(",").append(order.getSize()).append("\n");
+                stringBuilder.append(order.getPrice()).append(",").append(order.getSize()).append(System.lineSeparator());
                 break;
             }
             case Constant.QUERY_SIZE: {
@@ -99,10 +126,11 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
                         .filter(o -> o.getPrice() == price)
                         .findAny()
                         .orElse(new Order());
-                stringBuilder.append(order.getSize()).append("\n");
+                stringBuilder.append(order.getSize()).append(System.lineSeparator());
                 break;
             }
-            default: break;
+            default:
+                break;
         }
         return stringBuilder.toString();
     }
@@ -116,6 +144,25 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
         return order;
     }
 
+    private void sortOrderList(List<Order> orderList, String listType) {
+        orderList.sort(Comparator.comparingInt(Order::getPrice));
+        if (listType.equals(Constant.TYPE_BID)) {
+            Collections.reverse(orderList);
+        }
+    }
+
+    private void addOrderToOrderList(List<Order> orderList, Order order) {
+        Order orderToRemove = new Order();
+        for (Order currentOrder : orderList) {
+            if (currentOrder.getPrice() == order.getPrice()) {
+                orderToRemove = currentOrder;
+                order.setSize(order.getSize() + currentOrder.getSize());
+            }
+        }
+        orderList.remove(orderToRemove);
+        orderList.add(order);
+    }
+
     private void removeOrderFromList(List<Order> orderList, int size) {
         List<Order> removeOrderList = new ArrayList<>();
         for (Order order : orderList) {
@@ -124,13 +171,36 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
                     size -= order.getSize();
                     removeOrderList.add(order);
                 } else {
-                    int currentOrderSize = order.getSize() - size;
-                    order.setSize(currentOrderSize);
+                    order.setSize(order.getSize() - size);
                     size = 0;
                 }
             }
         }
         orderList.removeAll(removeOrderList);
+    }
+
+    private Order removeOrderFromList(List<Order> orderList, int price, int size, String listType) {
+        List<Order> removeOrderList = new ArrayList<>();
+        Order newOrder = null;
+        for (Order order : orderList) {
+            if ((listType.equals(Constant.TYPE_ASK) && price >= order.getPrice())
+                    || (listType.equals(Constant.TYPE_BID) && price <= order.getPrice())) {
+                if (size >= order.getSize()) {
+                    size -= order.getSize();
+                    removeOrderList.add(order);
+                } else {
+                    order.setSize(order.getSize() - size);
+                    size = 0;
+                }
+            }
+        }
+        if (size > 0) {
+            newOrder = new Order();
+            newOrder.setSize(size);
+            newOrder.setPrice(price);
+        }
+        orderList.removeAll(removeOrderList);
+        return newOrder;
     }
 
     private void saveOutputFile(String content) {
