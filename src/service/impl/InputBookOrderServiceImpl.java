@@ -51,7 +51,7 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
                 }
                 readLine = reader.readLine();
             }
-            saveOutputFile(stringBuilder.toString().trim());
+            saveOutputFile(stringBuilder.toString());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -152,15 +152,16 @@ public class InputBookOrderServiceImpl implements InputBookOrderService {
     }
 
     private void addOrderToOrderList(List<Order> orderList, Order order) {
-        Order orderToRemove = new Order();
+        boolean priceWasFound = false;
         for (Order currentOrder : orderList) {
             if (currentOrder.getPrice() == order.getPrice()) {
-                orderToRemove = currentOrder;
-                order.setSize(order.getSize() + currentOrder.getSize());
+                currentOrder.setSize(order.getSize());
+                priceWasFound = true;
             }
         }
-        orderList.remove(orderToRemove);
-        orderList.add(order);
+        if (!priceWasFound) {
+            orderList.add(order);
+        }
     }
 
     private void removeOrderFromList(List<Order> orderList, int size) {
